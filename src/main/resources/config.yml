@@ -5,7 +5,7 @@
 api:
   base_url: "http://localhost:3000/api"
   timeout: 5000
-  admin_token: "3b4747726f978e802b9bca8acc8960c969397c68aab1644cda82ddd0fe46a819175b6b78b25580923e66a7d6325503e0ab0935d338f4a43dc1e27d22029d7fe8c"
+  api_key: "b834fa18492e3957f8fbd841a6403be9adedd466dcaa0595b45d5fcc1339df14e975e53362d9a92e722c32c56cc786f64bcecfa89cecd7c735a3f931140cf369"
   retry_attempts: 3
 
 # Настройки сервера

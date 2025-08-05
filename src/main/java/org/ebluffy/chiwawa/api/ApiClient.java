@@ -26,15 +26,15 @@ public class ApiClient {
     private final HttpClient httpClient;
     private final Gson gson;
     private final String baseUrl;
-    private final String adminToken;
+    private final String apiKey;
     private final int timeout;
     private final int maxRetries;
 
-    public ApiClient(JavaPlugin plugin, String baseUrl, String adminToken, int timeout, int maxRetries) {
+    public ApiClient(JavaPlugin plugin, String baseUrl, String apiKey, int timeout, int maxRetries) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
         this.baseUrl = baseUrl;
-        this.adminToken = adminToken;
+        this.apiKey = apiKey;
         this.timeout = timeout;
         this.maxRetries = maxRetries;
 
@@ -136,7 +136,7 @@ public class ApiClient {
     public CompletableFuture<Boolean> checkServerAccess(String nickname) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = baseUrl + "/applications/server-access?nickname=" + nickname;
+                String url = baseUrl + "/plugin/server-access?nickname=" + nickname;
                 HttpResponse<String> response = makeRequest(url, "GET", null);
 
                 if (response.statusCode() == 200) {
@@ -274,7 +274,7 @@ public class ApiClient {
     public CompletableFuture<JsonObject> getServerInfo() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = baseUrl + "/server-info";
+                String url = baseUrl + "/plugin/server-info";
                 HttpResponse<String> response = makeRequest(url, "GET", null);
 
                 if (response.statusCode() == 200) {
@@ -298,7 +298,7 @@ public class ApiClient {
             try {
                 HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header("Authorization", "Bearer " + adminToken)
+                        .header("Authorization", "Bearer " + apiKey)
                         .header("Content-Type", "application/json")
                         .header("User-Agent", "ChiwawaPlugin/1.0")
                         .timeout(Duration.ofMillis(timeout));
@@ -424,7 +424,7 @@ public class ApiClient {
                 
                 JsonObject requestBody = new JsonObject();
                 requestBody.addProperty("minecraft_nick", minecraftNick);
-                requestBody.addProperty("admin_token", adminToken);
+                // Убираем admin_token из тела - теперь используется заголовок Authorization
                 
                 // Конвертируем статистику в JSON
                 JsonObject statsJson = gson.toJsonTree(stats).getAsJsonObject();
@@ -461,9 +461,14 @@ public class ApiClient {
     public CompletableFuture<Boolean> testConnection() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = baseUrl + "/auth/verify";
+                String url = baseUrl + "/plugin/server-info";
                 HttpResponse<String> response = makeRequest(url, "GET", null);
-                return response.statusCode() == 200;
+                
+                if (response.statusCode() == 200) {
+                    JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+                    return json.has("success") && json.get("success").getAsBoolean();
+                }
+                return false;
             } catch (Exception e) {
                 logger.severe("Ошибка проверки соединения с API: " + e.getMessage());
                 return false;

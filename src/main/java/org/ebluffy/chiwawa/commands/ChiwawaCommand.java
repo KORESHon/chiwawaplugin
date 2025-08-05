@@ -7,6 +7,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import com.google.gson.JsonObject;
+import org.ebluffy.chiwawa.api.ApiClient;
 import org.ebluffy.chiwawa.api.dto.ChiwawaUser;
 import org.ebluffy.chiwawa.api.dto.PlayerStats;
 import org.ebluffy.chiwawa.config.ConfigManager;
@@ -29,14 +31,16 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
     private final UserManager userManager;
     private final PlaytimeManager playtimeManager;
     private final ReputationManager reputationManager;
+    private final ApiClient apiClient;
 
     public ChiwawaCommand(JavaPlugin plugin, ConfigManager configManager, UserManager userManager,
-                         PlaytimeManager playtimeManager, ReputationManager reputationManager) {
+                         PlaytimeManager playtimeManager, ReputationManager reputationManager, ApiClient apiClient) {
         this.plugin = plugin;
         this.configManager = configManager;
         this.userManager = userManager;
         this.playtimeManager = playtimeManager;
         this.reputationManager = reputationManager;
+        this.apiClient = apiClient;
     }
 
     @Override
@@ -93,7 +97,7 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
-     * Перезагрузить конфигурацию
+     * Перезагрузить конфигурацию и переподключиться к API
      */
     private boolean handleReload(CommandSender sender) {
         if (!hasPermission(sender, "chiwawa.admin")) {
@@ -101,8 +105,31 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        sender.sendMessage("§e§l[RELOAD] §7Начинаем перезагрузку плагина...");
+        
+        // 1. Перезагружаем конфигурацию
+        sender.sendMessage("§7[1/4] Перезагрузка конфигурации...");
         configManager.reloadConfig();
-        sender.sendMessage("§aКонфигурация успешно перезагружена!");
+        
+        // 2. Тестируем подключение к API
+        sender.sendMessage("§7[2/4] Проверка подключения к API...");
+        apiClient.testConnection().thenAccept(connected -> {
+            if (connected) {
+                sender.sendMessage("§a[✓] API соединение восстановлено!");
+            } else {
+                sender.sendMessage("§c[✗] Ошибка подключения к API!");
+            }
+        });
+        
+        // 3. Очищаем кеш пользователей
+        sender.sendMessage("§7[3/4] Очистка кеша пользователей...");
+        userManager.clearCache();
+        sender.sendMessage("§a[✓] Кеш пользователей очищен!");
+        
+        // 4. Завершаем перезагрузку
+        sender.sendMessage("§7[4/4] Завершение...");
+        
+        sender.sendMessage("§a§l[SUCCESS] §fПлагин успешно перезагружен!");
         return true;
     }
 
@@ -369,6 +396,38 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§7Загружено пользователей: §a" + userManager.getCacheSize());
         sender.sendMessage("§7Отслеживается времени: §a" + playtimeManager.getPlaytimeStats());
         sender.sendMessage("§7Репутация: §a" + reputationManager.getReputationStats());
+        
+        // Получаем информацию с сайта
+        sender.sendMessage("§7Получение данных с сайта...");
+        apiClient.getServerInfo().thenAccept(serverInfo -> {
+            if (serverInfo != null && serverInfo.has("success") && serverInfo.get("success").getAsBoolean()) {
+                sender.sendMessage("§a§l──── ДАННЫЕ С САЙТА ────");
+                
+                if (serverInfo.has("server")) {
+                    JsonObject server = serverInfo.getAsJsonObject("server");
+                    sender.sendMessage("§7Статус сервера: §a" + (serverInfo.get("online").getAsBoolean() ? "онлайн" : "офлайн"));
+                    sender.sendMessage("§7Версия: §f" + server.get("version").getAsString());
+                    sender.sendMessage("§7MOTD: §f" + server.get("motd").getAsString());
+                }
+                
+                if (serverInfo.has("performance")) {
+                    JsonObject performance = serverInfo.getAsJsonObject("performance");
+                    sender.sendMessage("§7Ping: §e" + performance.get("ping").getAsInt() + "ms");
+                    sender.sendMessage("§7TPS: §e" + performance.get("tps").getAsDouble());
+                }
+                
+                if (serverInfo.has("players")) {
+                    JsonObject players = serverInfo.getAsJsonObject("players");
+                    sender.sendMessage("§7Игроков в базе: §a" + players.get("online").getAsInt() + "/" + players.get("max").getAsInt());
+                }
+            } else {
+                sender.sendMessage("§cОшибка получения данных с сайта!");
+            }
+        }).exceptionally(throwable -> {
+            sender.sendMessage("§cОшибка подключения к API сайта: " + throwable.getMessage());
+            return null;
+        });
+        
         sender.sendMessage("§e§l══════════════════════════════════");
 
         return true;

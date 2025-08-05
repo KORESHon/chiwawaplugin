@@ -47,7 +47,7 @@ public class ChiwawaPlugin extends JavaPlugin {
             // 2. Инициализация API клиента
             apiClient = new ApiClient(this,
                 configManager.getApiBaseUrl(),
-                configManager.getAdminToken(),
+                configManager.getApiKey(),
                 configManager.getApiTimeout(),
                 configManager.getRetryAttempts());
 
@@ -121,7 +121,7 @@ public class ChiwawaPlugin extends JavaPlugin {
      */
     private void registerCommands() {
         // Главная админ команда
-        ChiwawaCommand chiwawaCommand = new ChiwawaCommand(this, configManager, userManager, playtimeManager, reputationManager);
+        ChiwawaCommand chiwawaCommand = new ChiwawaCommand(this, configManager, userManager, playtimeManager, reputationManager, apiClient);
         getCommand("chiwawa").setExecutor(chiwawaCommand);
         getCommand("chiwawa").setTabCompleter(chiwawaCommand);
 

@@ -48,8 +48,8 @@ public class ConfigManager {
         return config.getInt("api.timeout", 5000);
     }
 
-    public String getAdminToken() {
-        return config.getString("api.admin_token", "");
+    public String getApiKey() {
+        return config.getString("api.api_key", "");
     }
 
     public int getRetryAttempts() {
@@ -106,7 +106,7 @@ public class ConfigManager {
     public boolean validateConfig() {
         boolean valid = true;
 
-        if (getAdminToken().isEmpty()) {
+        if (getApiKey().isEmpty()) {
             logger.severe("Admin token не настроен! Плагин не будет работать корректно.");
             valid = false;
         }
