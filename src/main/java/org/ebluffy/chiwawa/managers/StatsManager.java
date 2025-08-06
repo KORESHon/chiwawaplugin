@@ -193,8 +193,8 @@ public class StatsManager {
             // Прыжки
             stats.put("jumps_count", getPlayerStatistic(player, Statistic.JUMP));
             
-            // Время последнего входа
-            stats.put("last_seen", System.currentTimeMillis());
+            // Время последнего входа (в правильном формате для PostgreSQL)
+            stats.put("last_seen", java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             
             // IP адрес
             if (player.getAddress() != null) {

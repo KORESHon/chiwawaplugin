@@ -125,4 +125,18 @@ public class ConfigManager {
     public FileConfiguration getConfig() {
         return config;
     }
+    
+    /**
+     * Получить IP сервера из конфигурации
+     */
+    public String getServerIp() {
+        return config.getString("server.ip", "localhost");
+    }
+    
+    /**
+     * Получить порт сервера из конфигурации
+     */
+    public int getServerPort() {
+        return config.getInt("server.port", 25565);
+    }
 }

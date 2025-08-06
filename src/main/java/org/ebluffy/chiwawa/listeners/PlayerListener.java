@@ -12,6 +12,7 @@ import org.ebluffy.chiwawa.api.ApiClient;
 import org.ebluffy.chiwawa.api.dto.ChiwawaUser;
 import org.ebluffy.chiwawa.config.ConfigManager;
 import org.ebluffy.chiwawa.managers.PlaytimeManager;
+import org.ebluffy.chiwawa.managers.PlayerStatsManager;
 import org.ebluffy.chiwawa.managers.UserManager;
 
 import java.util.logging.Logger;
@@ -25,15 +26,17 @@ public class PlayerListener implements Listener {
     private final ConfigManager configManager;
     private final UserManager userManager;
     private final PlaytimeManager playtimeManager;
+    private final PlayerStatsManager playerStatsManager;
     private final ApiClient apiClient;
     private final org.ebluffy.chiwawa.managers.StatsManager statsManager;
 
-    public PlayerListener(JavaPlugin plugin, ConfigManager configManager, UserManager userManager, PlaytimeManager playtimeManager) {
+    public PlayerListener(JavaPlugin plugin, ConfigManager configManager, UserManager userManager, PlaytimeManager playtimeManager, PlayerStatsManager playerStatsManager) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
         this.configManager = configManager;
         this.userManager = userManager;
         this.playtimeManager = playtimeManager;
+        this.playerStatsManager = playerStatsManager;
         // Получаем ApiClient и StatsManager из главного плагина
         this.apiClient = ((org.ebluffy.chiwawa.ChiwawaPlugin) plugin).getApiClient();
         this.statsManager = ((org.ebluffy.chiwawa.ChiwawaPlugin) plugin).getStatsManager();
@@ -66,12 +69,34 @@ public class PlayerListener implements Listener {
                     event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_WHITELIST,
                         configManager.getMessage("no_access_kick"));
                     logger.info("Игрок " + playerName + " не допущен на сервер - нет доступа");
-                } else {
-                    logger.info("Игрок " + playerName + " допущен на сервер");
+                    return;
                 }
-            } else {
-                logger.info("Игрок " + playerName + " допущен на сервер (whitelist отключен)");
             }
+
+            // ВАЖНО: Проверяем бан игрока ВСЕГДА (независимо от whitelist)
+            ChiwawaUser user = apiClient.getUserByNickname(playerName).get();
+            if (user != null && user.isBanned()) {
+                String banMessage = "§c§lВЫ ЗАБЛОКИРОВАНЫ НА СЕРВЕРЕ\n\n";
+                banMessage += "§fПричина: §c" + (user.getBanReason() != null ? user.getBanReason() : "Не указана") + "\n\n";
+                
+                if (user.getBanUntil() != null && !user.getBanUntil().isEmpty()) {
+                    // Временный бан
+                    banMessage += "§fТип бана: §eВременный\n";
+                    banMessage += "§fОстается времени: §e" + user.getFormattedBanTimeRemaining() + "\n\n";
+                } else {
+                    // Постоянный бан
+                    banMessage += "§fТип бана: §4Постоянный\n\n";
+                }
+                
+                banMessage += "§7Обратитесь к администрации для разбана\n";
+                banMessage += "§7Discord: §bhttps://discord.gg/chiwawa";
+                
+                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, banMessage);
+                logger.info("Игрок " + playerName + " не допущен на сервер - заблокирован: " + user.getBanReason());
+                return;
+            }
+
+            logger.info("Игрок " + playerName + " допущен на сервер");
 
         } catch (Exception e) {
             logger.severe("Ошибка проверки доступа для " + playerName + ": " + e.getMessage());
@@ -103,6 +128,9 @@ public class PlayerListener implements Listener {
                         
                         // Уведомляем StatsManager о входе игрока
                         statsManager.onPlayerJoin(player.getUniqueId());
+                        
+                        // Запускаем отслеживание сессии игрока
+                        playerStatsManager.startPlayerSession(player);
                         
                         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                             player.sendMessage("§a§l✓ Добро пожаловать!");
@@ -189,6 +217,9 @@ public class PlayerListener implements Listener {
 
         // Уведомляем StatsManager о выходе игрока
         statsManager.onPlayerQuit(player.getUniqueId());
+
+        // Завершаем отслеживание сессии игрока
+        playerStatsManager.endPlayerSession(player);
 
         // Сохраняем время игры
         playtimeManager.onPlayerQuit(player.getUniqueId())

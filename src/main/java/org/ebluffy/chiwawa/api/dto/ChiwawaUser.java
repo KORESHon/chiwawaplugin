@@ -45,6 +45,9 @@ public class ChiwawaUser {
     @SerializedName("ban_reason")
     private String banReason;
 
+    @SerializedName("ban_until")
+    private String banUntil;
+
     // Конструкторы
     public ChiwawaUser() {}
 
@@ -91,6 +94,9 @@ public class ChiwawaUser {
 
     public String getBanReason() { return banReason; }
     public void setBanReason(String banReason) { this.banReason = banReason; }
+
+    public String getBanUntil() { return banUntil; }
+    public void setBanUntil(String banUntil) { this.banUntil = banUntil; }
 
     /**
      * Проверяет, имеет ли игрок доступ к серверу
@@ -151,6 +157,40 @@ public class ChiwawaUser {
      */
     public boolean isModerator() {
         return "moderator".equals(role) || "admin".equals(role);
+    }
+
+    /**
+     * Получить отформатированное время до окончания бана
+     */
+    public String getFormattedBanTimeRemaining() {
+        if (banUntil == null || banUntil.isEmpty()) {
+            return "Постоянно";
+        }
+
+        try {
+            // Парсим дату из ISO формата
+            java.time.LocalDateTime banDate = java.time.LocalDateTime.parse(banUntil.replace("Z", "").replace("+00", ""));
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            
+            if (banDate.isBefore(now)) {
+                return "Бан истек";
+            }
+            
+            java.time.Duration duration = java.time.Duration.between(now, banDate);
+            long days = duration.toDays();
+            long hours = duration.toHours() % 24;
+            long minutes = duration.toMinutes() % 60;
+            
+            if (days > 0) {
+                return days + "д " + hours + "ч " + minutes + "м";
+            } else if (hours > 0) {
+                return hours + "ч " + minutes + "м";
+            } else {
+                return minutes + "м";
+            }
+        } catch (Exception e) {
+            return "Ошибка расчета времени";
+        }
     }
 
     @Override

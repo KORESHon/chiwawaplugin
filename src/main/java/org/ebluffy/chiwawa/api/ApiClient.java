@@ -53,13 +53,13 @@ public class ApiClient {
     public CompletableFuture<ChiwawaUser> getUserByNickname(String nickname) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = baseUrl + "/admin/users?nickname=" + nickname;
+                String url = baseUrl + "/admin/users/by-nick/" + nickname;
                 HttpResponse<String> response = makeRequest(url, "GET", null);
 
                 if (response.statusCode() == 200) {
                     JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-                    if (json.has("users") && json.getAsJsonArray("users").size() > 0) {
-                        JsonObject userJson = json.getAsJsonArray("users").get(0).getAsJsonObject();
+                    if (json.has("success") && json.get("success").getAsBoolean()) {
+                        JsonObject userJson = json.getAsJsonObject("user");
                         return gson.fromJson(userJson, ChiwawaUser.class);
                     }
                 }
@@ -456,6 +456,56 @@ public class ApiClient {
     }
 
     /**
+     * Отправка данных о состоянии сервера (TPS, память, время работы)
+     */
+    public CompletableFuture<Boolean> updateServerData(String serverIp, int serverPort, double tps, long uptimeSeconds, 
+                                                      long maxMemory, long usedMemory, long freeMemory, 
+                                                      int onlinePlayers, int maxPlayers, String serverVersion, 
+                                                      int pluginsCount, int loadedWorlds) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = baseUrl + "/settings/server-data";
+                
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("server_ip", serverIp);
+                requestBody.addProperty("server_port", serverPort);
+                requestBody.addProperty("tps", tps);
+                requestBody.addProperty("uptime_seconds", uptimeSeconds);
+                requestBody.addProperty("max_memory", maxMemory);
+                requestBody.addProperty("used_memory", usedMemory);
+                requestBody.addProperty("free_memory", freeMemory);
+                requestBody.addProperty("online_players", onlinePlayers);
+                requestBody.addProperty("max_players", maxPlayers);
+                requestBody.addProperty("server_version", serverVersion);
+                requestBody.addProperty("plugins_count", pluginsCount);
+                requestBody.addProperty("loaded_worlds", loadedWorlds);
+                
+                HttpResponse<String> response = makeRequest(url, "POST", requestBody.toString());
+                
+                if (response.statusCode() == 200) {
+                    JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                    boolean success = jsonResponse.has("success") && jsonResponse.get("success").getAsBoolean();
+                    
+                    if (success) {
+                        logger.fine("Данные сервера успешно обновлены");
+                    } else {
+                        String error = jsonResponse.has("error") ? jsonResponse.get("error").getAsString() : "Неизвестная ошибка";
+                        logger.warning("Ошибка обновления данных сервера: " + error);
+                    }
+                    
+                    return success;
+                } else {
+                    logger.warning("Ошибка HTTP при обновлении данных сервера: " + response.statusCode());
+                    return false;
+                }
+            } catch (Exception e) {
+                logger.severe("Ошибка отправки данных сервера: " + e.getMessage());
+                return false;
+            }
+        });
+    }
+
+    /**
      * Проверка соединения с API
      */
     public CompletableFuture<Boolean> testConnection() {
@@ -471,6 +521,174 @@ public class ApiClient {
                 return false;
             } catch (Exception e) {
                 logger.severe("Ошибка проверки соединения с API: " + e.getMessage());
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Забанить игрока (по никнейму - для оффлайн игроков)
+     */
+    public CompletableFuture<Boolean> banPlayerByNickname(String nickname, String reason) {
+        return banPlayerByNickname(nickname, reason, 0); // 0 дней = постоянный бан
+    }
+
+    /**
+     * Забанить игрока с указанием количества дней (по никнейму - для оффлайн игроков)
+     */
+    public CompletableFuture<Boolean> banPlayerByNickname(String nickname, String reason, int days) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = baseUrl + "/admin/users/0/ban"; // ID не важен, используется nickname
+                
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("reason", reason);
+                requestBody.addProperty("minecraft_nick", nickname);
+                
+                if (days > 0) {
+                    requestBody.addProperty("type", "temporary");
+                    requestBody.addProperty("duration", days);
+                    requestBody.addProperty("unit", "days");
+                } else {
+                    requestBody.addProperty("type", "permanent");
+                }
+                
+                HttpResponse<String> response = makeRequest(url, "PUT", requestBody.toString());
+                
+                if (response.statusCode() == 200) {
+                    JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                    boolean success = jsonResponse.has("success") && jsonResponse.get("success").getAsBoolean();
+                    
+                    if (success) {
+                        if (days > 0) {
+                            logger.info("Игрок " + nickname + " успешно забанен на " + days + " дней");
+                        } else {
+                            logger.info("Игрок " + nickname + " успешно забанен навсегда");
+                        }
+                    } else {
+                        String error = jsonResponse.has("error") ? jsonResponse.get("error").getAsString() : "Неизвестная ошибка";
+                        logger.warning("Ошибка бана игрока " + nickname + ": " + error);
+                    }
+                    
+                    return success;
+                } else {
+                    logger.warning("Ошибка HTTP при бане игрока " + nickname + ": " + response.statusCode());
+                    return false;
+                }
+            } catch (Exception e) {
+                logger.severe("Ошибка бана игрока " + nickname + ": " + e.getMessage());
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Разбанить игрока (по никнейму - для оффлайн игроков)
+     */
+    public CompletableFuture<Boolean> unbanPlayerByNickname(String nickname) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = baseUrl + "/admin/users/0/unban"; // ID не важен, используется nickname
+                
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("minecraft_nick", nickname);
+                
+                HttpResponse<String> response = makeRequest(url, "PUT", requestBody.toString());
+                
+                if (response.statusCode() == 200) {
+                    JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                    boolean success = jsonResponse.has("success") && jsonResponse.get("success").getAsBoolean();
+                    
+                    if (success) {
+                        logger.info("Игрок " + nickname + " успешно разбанен");
+                    } else {
+                        String error = jsonResponse.has("error") ? jsonResponse.get("error").getAsString() : "Неизвестная ошибка";
+                        logger.warning("Ошибка разбана игрока " + nickname + ": " + error);
+                    }
+                    
+                    return success;
+                } else {
+                    logger.warning("Ошибка HTTP при разбане игрока " + nickname + ": " + response.statusCode());
+                    return false;
+                }
+            } catch (Exception e) {
+                logger.severe("Ошибка разбана игрока " + nickname + ": " + e.getMessage());
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Обновить Trust Level игрока (по никнейму - для оффлайн игроков)
+     */
+    public CompletableFuture<Boolean> updateTrustLevelByNickname(String nickname, int trustLevel) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = baseUrl + "/admin/users/0/trust-level"; // ID не важен, используется nickname
+                
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("level", trustLevel);
+                requestBody.addProperty("reason", "Изменение через плагин");
+                requestBody.addProperty("minecraft_nick", nickname);
+                
+                HttpResponse<String> response = makeRequest(url, "PUT", requestBody.toString());
+                
+                if (response.statusCode() == 200) {
+                    JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                    boolean success = jsonResponse.has("success") && jsonResponse.get("success").getAsBoolean();
+                    
+                    if (success) {
+                        logger.info("Trust Level игрока " + nickname + " изменен на " + trustLevel);
+                    } else {
+                        String error = jsonResponse.has("error") ? jsonResponse.get("error").getAsString() : "Неизвестная ошибка";
+                        logger.warning("Ошибка изменения Trust Level игрока " + nickname + ": " + error);
+                    }
+                    
+                    return success;
+                } else {
+                    logger.warning("Ошибка HTTP при изменении Trust Level игрока " + nickname + ": " + response.statusCode());
+                    return false;
+                }
+            } catch (Exception e) {
+                logger.severe("Ошибка изменения Trust Level игрока " + nickname + ": " + e.getMessage());
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Установить репутацию игрока (по никнейму - для оффлайн игроков)
+     */
+    public CompletableFuture<Boolean> setReputationByNickname(String nickname, int reputation, String reason) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = baseUrl + "/admin/users/0/reputation"; // ID не важен, используется nickname
+                
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("reputation", reputation); // УСТАНАВЛИВАЕМ, а не изменяем
+                requestBody.addProperty("reason", reason);
+                requestBody.addProperty("minecraft_nick", nickname);
+                
+                HttpResponse<String> response = makeRequest(url, "PUT", requestBody.toString());
+                
+                if (response.statusCode() == 200) {
+                    JsonObject jsonResponse = JsonParser.parseString(response.body()).getAsJsonObject();
+                    boolean success = jsonResponse.has("success") && jsonResponse.get("success").getAsBoolean();
+                    
+                    if (success) {
+                        logger.info("Репутация игрока " + nickname + " установлена в " + reputation);
+                    } else {
+                        String error = jsonResponse.has("error") ? jsonResponse.get("error").getAsString() : "Неизвестная ошибка";
+                        logger.warning("Ошибка установки репутации игрока " + nickname + ": " + error);
+                    }
+                    
+                    return success;
+                } else {
+                    logger.warning("Ошибка HTTP при установке репутации игрока " + nickname + ": " + response.statusCode());
+                    return false;
+                }
+            } catch (Exception e) {
+                logger.severe("Ошибка установки репутации игрока " + nickname + ": " + e.getMessage());
                 return false;
             }
         });

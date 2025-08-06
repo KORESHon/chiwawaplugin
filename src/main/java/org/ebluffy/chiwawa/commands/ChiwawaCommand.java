@@ -108,11 +108,11 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e§l[RELOAD] §7Начинаем перезагрузку плагина...");
         
         // 1. Перезагружаем конфигурацию
-        sender.sendMessage("§7[1/4] Перезагрузка конфигурации...");
+        sender.sendMessage("§7[1/2] Перезагрузка конфигурации...");
         configManager.reloadConfig();
         
         // 2. Тестируем подключение к API
-        sender.sendMessage("§7[2/4] Проверка подключения к API...");
+        sender.sendMessage("§7[2/2] Проверка подключения к API...");
         apiClient.testConnection().thenAccept(connected -> {
             if (connected) {
                 sender.sendMessage("§a[✓] API соединение восстановлено!");
@@ -121,13 +121,13 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
             }
         });
         
-        // 3. Очищаем кеш пользователей
-        sender.sendMessage("§7[3/4] Очистка кеша пользователей...");
-        userManager.clearCache();
-        sender.sendMessage("§a[✓] Кеш пользователей очищен!");
+        // // 3. Очищаем кеш пользователей
+        // sender.sendMessage("§7[3/4] Очистка кеша пользователей...");
+        // userManager.clearCache();
+        // sender.sendMessage("§a[✓] Кеш пользователей очищен!");
         
-        // 4. Завершаем перезагрузку
-        sender.sendMessage("§7[4/4] Завершение...");
+        // // 4. Завершаем перезагрузку
+        // sender.sendMessage("§7[3/3] Завершение...");
         
         sender.sendMessage("§a§l[SUCCESS] §fПлагин успешно перезагружен!");
         return true;
@@ -179,32 +179,75 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 3) {
-            sender.sendMessage("§cИспользование: /chiwawa ban <игрок> <причина>");
+            sender.sendMessage("§cИспользование: /chiwawa ban <игрок> <причина> [дни]");
+            sender.sendMessage("§7Пример: /chiwawa ban Player Читы 7");
+            sender.sendMessage("§7Для постоянного бана не указывайте дни или укажите 0");
             return true;
         }
 
         String playerName = args[1];
-        String reason = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
-
-        UUID playerUuid = getPlayerUuid(playerName);
-        if (playerUuid == null) {
-            sender.sendMessage("§cИгрок не найден!");
-            return true;
+        
+        // Определяем где заканчивается причина и начинается количество дней
+        int daysIndex = -1;
+        int daysValue = 0; // 0 означает постоянный бан
+        
+        // Проверяем последний аргумент - если это число, то это дни
+        if (args.length > 3) {
+            try {
+                String lastArg = args[args.length - 1];
+                daysValue = Integer.parseInt(lastArg);
+                daysIndex = args.length - 1;
+            } catch (NumberFormatException e) {
+                // Последний аргумент не число, значит вся строка после имени - это причина
+                daysValue = 0;
+            }
+        }
+        
+        final int days = daysValue; // Делаем final для использования в lambda
+        
+        // Формируем причину
+        String reason;
+        if (daysIndex > 0) {
+            // Есть дни в конце, причина до них
+            reason = String.join(" ", Arrays.copyOfRange(args, 2, daysIndex));
+        } else {
+            // Нет дней, вся строка после имени - причина
+            reason = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
         }
 
-        userManager.banPlayer(playerUuid, reason)
+        // Используем nickname-based бан для поддержки оффлайн игроков
+        apiClient.banPlayerByNickname(playerName, reason, days)
             .thenAccept(success -> {
                 if (success) {
-                    sender.sendMessage("§aИгрок " + playerName + " успешно забанен!");
+                    if (days > 0) {
+                        sender.sendMessage("§aИгрок " + playerName + " забанен на " + days + " дней!");
+                        sender.sendMessage("§7Причина: " + reason);
+                    } else {
+                        sender.sendMessage("§aИгрок " + playerName + " забанен навсегда!");
+                        sender.sendMessage("§7Причина: " + reason);
+                    }
 
                     // Кикаем игрока если он онлайн
                     Player targetPlayer = Bukkit.getPlayerExact(playerName);
                     if (targetPlayer != null) {
-                        targetPlayer.kickPlayer("§cВы были забанены!\nПричина: " + reason);
+                        String kickMessage = "§c§lВЫ ЗАБЛОКИРОВАНЫ НА СЕРВЕРЕ\n\n";
+                        kickMessage += "§fПричина: §c" + reason + "\n\n";
+                        if (days > 0) {
+                            kickMessage += "§fТип бана: §eВременный (" + days + " дней)\n\n";
+                        } else {
+                            kickMessage += "§fТип бана: §4Постоянный\n\n";
+                        }
+                        kickMessage += "§7Обратитесь к администрации для разбана";
+                        
+                        targetPlayer.kickPlayer(kickMessage);
                     }
                 } else {
-                    sender.sendMessage("§cОшибка при бане игрока!");
+                    sender.sendMessage("§cОшибка при бане игрока! Возможно игрок не найден в базе данных.");
                 }
+            })
+            .exceptionally(throwable -> {
+                sender.sendMessage("§cОшибка при бане игрока: " + throwable.getMessage());
+                return null;
             });
 
         return true;
@@ -225,20 +268,19 @@ public class ChiwawaCommand implements CommandExecutor, TabCompleter {
         }
 
         String playerName = args[1];
-        UUID playerUuid = getPlayerUuid(playerName);
 
-        if (playerUuid == null) {
-            sender.sendMessage("§cИгрок не найден!");
-            return true;
-        }
-
-        userManager.unbanPlayer(playerUuid)
+        // Используем nickname-based разбан для поддержки оффлайн игроков
+        apiClient.unbanPlayerByNickname(playerName)
             .thenAccept(success -> {
                 if (success) {
                     sender.sendMessage("§aИгрок " + playerName + " успешно разбанен!");
                 } else {
-                    sender.sendMessage("§cОшибка при разбане игрока!");
+                    sender.sendMessage("§cОшибка при разбане игрока! Возможно игрок не найден в базе данных.");
                 }
+            })
+            .exceptionally(throwable -> {
+                sender.sendMessage("§cОшибка при разбане игрока: " + throwable.getMessage());
+                return null;
             });
 
         return true;

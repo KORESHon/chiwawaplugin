@@ -152,7 +152,8 @@ public class UserManager {
             return CompletableFuture.completedFuture(false);
         }
 
-        return apiClient.updateTrustLevel(user.getId(), newTrustLevel)
+        // Используем метод по никнейму для поддержки оффлайн игроков
+        return apiClient.updateTrustLevelByNickname(user.getNickname(), newTrustLevel)
                 .thenApply(success -> {
                     if (success) {
                         user.setTrustLevel(newTrustLevel);
@@ -171,7 +172,8 @@ public class UserManager {
             return CompletableFuture.completedFuture(false);
         }
 
-        return apiClient.banPlayer(user.getId(), reason)
+        // Используем метод по никнейму для поддержки оффлайн игроков
+        return apiClient.banPlayerByNickname(user.getNickname(), reason)
                 .thenApply(success -> {
                     if (success) {
                         user.setBanned(true);
@@ -191,7 +193,8 @@ public class UserManager {
             return CompletableFuture.completedFuture(false);
         }
 
-        return apiClient.unbanPlayer(user.getId())
+        // Используем метод по никнейму для поддержки оффлайн игроков
+        return apiClient.unbanPlayerByNickname(user.getNickname())
                 .thenApply(success -> {
                     if (success) {
                         user.setBanned(false);

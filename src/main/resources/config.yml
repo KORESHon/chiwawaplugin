@@ -10,6 +10,8 @@ api:
 
 # Настройки сервера
 server:
+  ip: "localhost"  # IP сервера для отправки статистики (можно указать внешний IP)
+  port: 25164      # Порт сервера
   enable_whitelist: true
   enable_time_limit: true
   enable_trust_system: true

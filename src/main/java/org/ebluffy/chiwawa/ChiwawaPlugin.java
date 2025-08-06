@@ -1,12 +1,13 @@
 package org.ebluffy.chiwawa;
 
 import org.bukkit.Bukkit;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.ebluffy.chiwawa.api.ApiClient;
 import org.ebluffy.chiwawa.commands.*;
 import org.ebluffy.chiwawa.config.ConfigManager;
-import org.ebluffy.chiwawa.listeners.PlayerListener;
 import org.ebluffy.chiwawa.listeners.AuthenticationListener;
+import org.ebluffy.chiwawa.listeners.PlayerListener;
 import org.ebluffy.chiwawa.managers.*;
 
 import java.util.logging.Logger;
@@ -24,6 +25,8 @@ public class ChiwawaPlugin extends JavaPlugin {
     private PlaytimeManager playtimeManager;
     private ReputationManager reputationManager;
     private StatsManager statsManager;
+    private ServerStatsManager serverStatsManager;
+    private PlayerStatsManager playerStatsManager;
 
     // Логгер
     private Logger logger;
@@ -56,6 +59,8 @@ public class ChiwawaPlugin extends JavaPlugin {
             playtimeManager = new PlaytimeManager(this, apiClient, userManager, configManager);
             reputationManager = new ReputationManager(this, apiClient, userManager, configManager);
             statsManager = new StatsManager(this, apiClient, userManager, configManager);
+            serverStatsManager = new ServerStatsManager(this, apiClient, configManager);
+            playerStatsManager = new PlayerStatsManager(this, apiClient);
 
             // 4. Регистрация команд
             registerCommands();
@@ -93,6 +98,14 @@ public class ChiwawaPlugin extends JavaPlugin {
             
             if (statsManager != null) {
                 statsManager.stop();
+            }
+            
+            if (serverStatsManager != null) {
+                serverStatsManager.stopStatsCollection();
+            }
+            
+            if (playerStatsManager != null) {
+                playerStatsManager.stopStatsUpdates();
             }
 
             // Сохранение данных всех онлайн игроков
@@ -144,7 +157,7 @@ public class ChiwawaPlugin extends JavaPlugin {
      */
     private void registerListeners() {
         getServer().getPluginManager().registerEvents(
-            new PlayerListener(this, configManager, userManager, playtimeManager), this);
+            new PlayerListener(this, configManager, userManager, playtimeManager, playerStatsManager), this);
         
         getServer().getPluginManager().registerEvents(
             new AuthenticationListener(this, userManager), this);
@@ -164,6 +177,14 @@ public class ChiwawaPlugin extends JavaPlugin {
         // Запускаем менеджер статистики
         statsManager.start();
         logger.info("Менеджер статистики запущен");
+        
+        // Запускаем менеджер статистики сервера
+        serverStatsManager.startStatsCollection();
+        logger.info("Менеджер статистики сервера запущен");
+        
+        // Запускаем менеджер статистики игроков
+        playerStatsManager.startStatsUpdates();
+        logger.info("Менеджер статистики игроков запущен");
     }
 
     /**
